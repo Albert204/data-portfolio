@@ -1,0 +1,147 @@
+---
+title: "ej5_2-4"
+format: html
+editor: visual
+---
+
+## Datos y particion
+
+```{r}
+library(ISLR2)
+library(ggplot2)
+data(Boston)
+Boston$chas <- as.factor(Boston$chas)
+color_1 <- "turquoise2"
+```
+
+```{r}
+# Partición
+set.seed(1)
+n <- nrow(Boston)
+n_train <- 354
+n_train
+n_test <- n - n_train
+n_test
+train <- sort(sample(1:n, n_train))
+test <- (1:n)[-train]
+Boston_train <- Boston[train, ]
+Boston_test  <- Boston[test, ]
+```
+
+## Bagging
+
+```{r}
+## Bagging
+library(randomForest)
+set.seed(1)
+p <- ncol(Boston_train) - 1
+
+bag_Boston <- randomForest(medv ~ ., data = Boston_train,
+                           mtry = p, importance = TRUE)
+bag_Boston
+
+importance(bag_Boston)
+```
+
+```{r}
+varImpPlot(bag_Boston)
+```
+
+Destacan **rm** (\~68% IncMSE) y **lstat** (\~41%), seguidas por **ptratio** (\~20%) y **dis** (\~19%). Importancias medias para **tax, nox, age, crim**; **chas** y **zn** aportan poco.**rm** y **lstat** dominan la explicación de *medv*.
+
+```{r}
+pred_Boston_test_bag <- predict(bag_Boston, newdata = Boston_test)
+ECMT_bag <- mean((Boston_test$medv - pred_Boston_test_bag)^2)
+ECMT_bag
+
+# pred_Boston_test_bag
+```
+
+ECMT: 22.623. Interpretación: menor ECMT implica mejor desempeño de generalización en este *split*.
+
+```{r}
+Boston_test$Pred_medv_bag <- pred_Boston_test_bag
+ggplot(Boston_test, aes(x = medv, y = Pred_medv_bag)) +
+  theme_light(base_size = 15) +
+  geom_point(size = 2, color = color_1) +
+  labs(x = "medv (observado)", y = "Predicciones (bagging)")
+```
+
+## Random forest
+
+```{r}
+rf_Boston <- randomForest(medv ~ ., data = Boston_train,
+                          mtry = 4, importance = TRUE)
+rf_Boston
+importance(rf_Boston)
+```
+
+```{r}
+varImpPlot(rf_Boston)
+```
+
+Lideran **rm** y **lstat** . Segundo escalón: **nox**, **ptratio**, **crim** y **dis**. Importancia baja de **zn**, **rad**, **chas**.
+
+```{r}
+pred_Boston_test_rf <- predict(rf_Boston, newdata = Boston_test)
+ECMT_rf <- mean((Boston_test$medv - pred_Boston_test_rf)^2)
+ECMT_rf
+```
+
+ECMT: 15.141.
+
+```{r}
+Boston_test$Pred_medv_rf <- pred_Boston_test_rf
+ggplot(Boston_test, aes(x = medv, y = Pred_medv_rf)) + 
+  theme_light(base_size = 15) +
+  geom_point(size = 2, color = color_1) + 
+  labs(x = "medv (observado)", y = "Predicciones (random forest)")
+```
+
+## Boosting
+
+```{r}
+library(gbm)
+boost_Boston <- gbm(medv ~ ., data = Boston_train,
+                    distribution = "gaussian",
+                    n.trees = 500,
+                    interaction.depth = 4,
+                    shrinkage = 0.01,
+                    bag.fraction = 0.5)
+summary(boost_Boston)
+```
+
+```{r}
+# Partial dependence
+plot(boost_Boston, i = "rm")
+```
+
+```{r}
+plot(boost_Boston, i = "lstat")
+```
+
+```{r}
+pred_Boston_test_bo <- predict(boost_Boston, newdata = Boston_test, n.trees = 500)
+ECMT_bo <- mean((Boston_test$medv - pred_Boston_test_bo)^2)
+ECMT_bo
+
+#pred_Boston_test_bo
+```
+
+ECMT: 20.989.
+
+```{r}
+Boston_test$Pred_medv_bo <- pred_Boston_test_bo
+ggplot(Boston_test, aes(x = medv, y = Pred_medv_bo)) + 
+  theme_light(base_size = 15) +
+  geom_point(size = 2, color = color_1) + 
+  labs(x = "medv (observado)", y = "Predicciones (boosting)")
+```
+
+**ECMT (test):**\
+- Bagging = 22.624\
+- Random Forest = 15.141\
+- Boosting = 20.989
+
+**Mejor método en este split:** **Random Forest** (ECMT más bajo).\
+**Conclusión breve.** Con esta partición e hiperparámetros, **RF** generaliza mejor que bagging y boosting. En los tres enfoques, las medidas de importancia son consistentes: **rm** y **lstat** como predictores dominantes de *medv*, con contribución secundaria de **ptratio**, **nox**, **crim** y **dis**.

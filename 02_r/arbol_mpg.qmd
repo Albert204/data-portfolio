@@ -1,0 +1,118 @@
+---
+title: "ej4_2_4"
+format: html
+editor: visual
+---
+
+## Arbol mpg (millas por galon)
+
+```{r}
+library(ISLR2)
+data(Auto)
+Auto$origin <- as.factor(Auto$origin)
+Auto <- Auto[, !colnames(Auto) == "name"]
+color_1 <- "turquoise2"
+color_2 <- "salmon2"
+```
+
+```{r}
+# Partición
+set.seed(1)
+n <- nrow(Auto)
+n_train <- 275
+n_train
+n_test <- n - n_train
+n_test
+```
+
+```{r}
+train <- sort(sample(1:n, n_train))
+test <- (1:n)[-train]
+Auto_train <- Auto[train, ]
+Auto_test  <- Auto[test, ]
+```
+
+```{r}
+# Árbol de regresión
+library(tree)
+tree_Auto <- tree(mpg ~ ., data = Auto_train,
+                  control = tree.control(nobs = n_train, mincut = 2, minsize = 4))
+
+plot(tree_Auto)
+text(tree_Auto, pretty = 0)
+```
+
+La variable de primer corte es displacement; después destacan horsepower y year, también aparece weight. Las hojas predicen la media de mpg de cada segmento.
+
+```{r}
+summary(tree_Auto)
+tree_Auto
+```
+
+```{r}
+# Validación cruzada
+tree_Auto_cv <- cv.tree(tree_Auto, K = n_train)
+tree_Auto_cv$size
+tree_Auto_cv$dev
+```
+
+```{r}
+plot(tree_Auto_cv$size, tree_Auto_cv$dev, type = "b", col = color_1, lwd = 3,
+     xlab = "Tamaño del subárbol",
+     ylab = "Error cuadrático medio de validación cruzada")#no tiene sentido un ECM tan alto, sacado del rmarkdown proporcionado por el profesor.
+```
+
+La curva de cv.tree muestra deviance por tamaño de subárbol. Se elige best = 6 para mejorar interpretabilidad con pérdida marginal de ajuste.
+
+```{r}
+# Poda
+tree_Auto_prune <- prune.tree(tree_Auto, best = 6)
+plot(tree_Auto_prune)
+text(tree_Auto_prune, pretty = 0)
+```
+
+-Menor cilindrada y menor potencia -\> mayor mpg.
+
+-Más nuevos -\> mejor eficiencia.
+
+Coches pequeños y poco potentes y recientes ≈ mpg alto grandes y muy potentes ≈ mpg bajo.
+
+```{r}
+summary(tree_Auto_prune)
+tree_Auto_prune
+```
+
+```{r}
+# ECMT (MSE) ANTES y DESPUÉS de podar, en TRAIN y TEST
+pred_train_before <- predict(tree_Auto, newdata = Auto_train)
+ECMT_train_before <- mean((Auto_train$mpg - pred_train_before)^2)
+ECMT_train_before
+
+pred_test_before <- predict(tree_Auto, newdata = Auto_test)
+ECMT_test_before <- mean((Auto_test$mpg - pred_test_before)^2)
+ECMT_test_before
+
+pred_train_after <- predict(tree_Auto_prune, newdata = Auto_train)
+ECMT_train_after <- mean((Auto_train$mpg - pred_train_after)^2)
+ECMT_train_after
+
+pred_test_after <- predict(tree_Auto_prune, newdata = Auto_test)
+ECMT_test_after <- mean((Auto_test$mpg - pred_test_after)^2)
+ECMT_test_after
+```
+
+Tras podar, sube el error en entrenamiento (menos flexibilidad) y baja el error en test (mejor generalización) -\> menos sobreajuste.
+
+```{r}
+# Dispersión Observado vs Predicho
+library(ggplot2)
+Auto_test_plot <- Auto_test
+Auto_test_plot$Pred_mpg <- pred_test_after
+
+ggplot(Auto_test_plot, aes(x = mpg, y = Pred_mpg)) +
+  theme_light(base_size = 15) +
+  geom_point(size = 2, color = color_1) +
+  labs(x = "mpg (observado)", y = "mpg (predicho)")
+```
+
+El árbol podado de 6 hojas captura relaciones esperadas y fácilmente explicables (cilindrada/potencia/año) y mejora el ECMT en test frente al árbol sin podar, ofreciendo un buen equilibrio entre precisión e interpretabilidad.
